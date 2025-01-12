@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Booth - Chào Xuân</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-image: url('https://example.com/tet-background.jpg'); /* Thay bằng URL nền Tết */
+            background-size: cover;
+            background-position: center;
+            color: #FFD700; /* Màu vàng may mắn */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+        }
+        .container {
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.6); /* Nền trong suốt nhẹ */
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.7);
+        }
+        #preview {
+            width: 100%;
+            max-width: 480px;
+            aspect-ratio: 4 / 3;
+            background: black;
+            border: 5px solid #FFD700; /* Màu vàng Tết */
+            border-radius: 10px;
+            object-fit: cover;
+            margin: 0 auto;
+        }
+        .button {
+            background-color: #E53935; /* Màu đỏ nổi bật */
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            font-size: 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background-color 0.3s ease;
+        }
+        .button:hover {
+            background-color: #FF6F61; /* Màu đỏ sáng hơn khi hover */
+        }
+        .message {
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        .tet-decor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .tet-decor img {
+            position: absolute;
+            animation: float 3s infinite ease-in-out;
+        }
+        .tet-decor .lantern {
+            width: 60px;
+        }
+        .tet-decor .lantern.left {
+            top: 10%;
+            left: 5%;
+        }
+        .tet-decor .lantern.right {
+            top: 10%;
+            right: 5%;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="tet-decor">
+        <img src="https://example.com/lantern.png" alt="Lantern" class="lantern left">
+        <img src="https://example.com/lantern.png" alt="Lantern" class="lantern right">
+    </div>
+    <div class="container">
+        <video id="preview" autoplay></video>
+        <div class="message" id="message">Chào Xuân! Nhấn "Bắt đầu" để chụp ảnh!</div>
+
+        <!-- Phần chọn thời gian đếm ngược -->
+        <div>
+            <label for="countdownSlider">Thời gian đếm ngược (giây): </label>
+            <input type="range" id="countdownSlider" min="3" max="10" value="3">
+            <span id="countdownValue">3</span> giây
+        </div>
+
+        <button id="startButton" class="button">Bắt đầu</button>
+        <canvas id="finalCanvas" style="display: none;"></canvas>
+        <a id="downloadLink" class="button" style="display: none;" download="photo_strip.png">Tải ảnh xuống</a>
+    </div>
+
+    <script>
+        const preview = document.getElementById('preview');
+        const startButton = document.getElementById('startButton');
+        const message = document.getElementById('message');
+        const finalCanvas = document.getElementById('finalCanvas');
+        const downloadLink = document.getElementById('downloadLink');
+        const countdownSlider = document.getElementById('countdownSlider');
+        const countdownValue = document.getElementById('countdownValue');
+
+        let photoCount = 0;
+        const totalPhotos = 4;
+        const photos = [];
+        let countdownTime = 3;  // Mặc định là 3 giây
+
+        const constraints = {
+            video: {
+                width: { ideal: 1280 },
+                height: { ideal: 960 },
+            }
+        };
+
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                preview.srcObject = stream;
+            } catch (err) {
+                console.error('Lỗi khi truy cập camera: ', err);
+                message.textContent = 'Không thể truy cập camera!';
+            }
+        }
+
+        function resetInterface() {
+            message.textContent = 'Chào Xuân! Nhấn "Bắt đầu" để chụp ảnh!';
+            startButton.style.display = 'block';
+            photoCount = 0;
+            photos.length = 0;
+            downloadLink.style.display = 'none';
+        }
+
+        function startCountdown() {
+            countdownTime = parseInt(countdownSlider.value);  // Lấy giá trị từ thanh kéo
+            countdownValue.textContent = countdownTime;  // Hiển thị giá trị đếm ngược
+
+            let timeLeft = countdownTime;
+            message.textContent = `Đếm ngược: ${timeLeft}`;
+
+            const countdown = setInterval(() => {
+                timeLeft--;
+                if (timeLeft > 0) {
+                    message.textContent = `Đếm ngược: ${timeLeft}`;
+                } else {
+                    clearInterval(countdown);
+                    capturePhoto();
+                }
+            }, 1000);
+        }
+
+        function capturePhoto() {
+            photoCount++;
+
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 1024;  // Sửa kích thước để thêm khoảng cách giữa các ảnh
+            canvas.height = 768;  // Kích thước ảnh nhỏ hơn, tạo khoảng trống
+            context.drawImage(preview, 0, 0, canvas.width, canvas.height);
+
+            const photoData = canvas.toDataURL('image/png');
+            photos.push(photoData);
+
+            if (photoCount < totalPhotos) {
+                message.textContent = `Đã chụp ảnh ${photoCount}/${totalPhotos}`;
+                setTimeout(startCountdown, 1000);
+            } else {
+                message.textContent = 'Đang ghép ảnh...';
+                setTimeout(createPhotoStrip, 1000);
+            }
+        }
+
+        function createPhotoStrip() {
+            const canvasWidth = 1024 + 60;  // Tăng thêm 30px ở mỗi bên cho phần viền
+            const canvasHeight = (768 * totalPhotos) + 80 + 60; // Thêm không gian cho chữ và viền dày hơn
+            finalCanvas.width = canvasWidth;
+            finalCanvas.height = canvasHeight;
+
+            const context = finalCanvas.getContext('2d');
+            context.fillStyle = 'white';  // Màu nền trắng cho canvas
+            context.fillRect(0, 0, canvasWidth, canvasHeight);  // Vẽ nền trắng
+
+            // Vẽ viền trắng xung quanh
+            const borderThickness = 30;
+            const bottomBorderThickness = borderThickness * 10; // Viền dưới dày gấp mười lần viền bên
+            context.fillStyle = 'white';
+            context.fillRect(0, 0, canvasWidth, borderThickness);  // Viền trên
+            context.fillRect(0, 0, borderThickness, canvasHeight);  // Viền trái
+            context.fillRect(0, canvasHeight - bottomBorderThickness, canvasWidth, bottomBorderThickness);  // Viền dưới dày gấp mười lần
+            context.fillRect(canvasWidth - borderThickness, 0, borderThickness, canvasHeight);  // Viền phải
+
+            photos.forEach((photo, index) => {
+                const img = new Image();
+                img.src = photo;
+                img.onload = () => {
+                    context.drawImage(img, 30, index * 768 + 30, 1024, 768);  // Chèn ảnh với khoảng cách và viền
+
+                    if (index === totalPhotos - 1) {
+                        // Thêm chữ @By Wang2k8
+                        context.font = '24px Arial';
+                        context.fillStyle = 'rgba(255, 255, 255, 0.5)';  // Chữ mờ
+                        context.textAlign = 'right';
+                        context.fillText('@By Wang2k8', canvasWidth - 10, canvasHeight - 10);
+
+                        const finalImage = finalCanvas.toDataURL('image/png');
+                        downloadLink.href = finalImage;
+                        downloadLink.style.display = 'block';
+                        message.textContent = 'Hoàn thành! Chúc mừng năm mới!';
+                        setTimeout(() => {
+                            resetInterface();
+                        }, 5000); // Chờ 5 giây trước khi reset lại trang
+                    }
+                };
+            });
+        }
+
+        startButton.addEventListener('click', () => {
+            startButton.style.display = 'none';
+            startCountdown();
+        });
+
+        countdownSlider.addEventListener('input', () => {
+            countdownValue.textContent = countdownSlider.value;
+        });
+
+        initCamera();
+    </script>
+</body>
+</html>
